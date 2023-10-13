@@ -47,7 +47,7 @@ func getNamespace(ip string) string {
 		return defaultNamespace
 	}
 	cfg := val.(*meta.EgressConfig)
-	if v, ok := cfg.HostNamespace[ip]; ok {
+	if v, ok := cfg.SourceNamespace[ip]; ok {
 		return v
 	}
 	return defaultNamespace
@@ -57,6 +57,7 @@ func getDomainDownstream(domain string) *meta.DownStreamInfo {
 	select {
 	case domainAccessCh <- domain:
 	default:
+		log.Println("domain access chan is full")
 	}
 
 	val, ok := domainCfg.Load(domain)
@@ -128,7 +129,7 @@ func WatchDomain() {
 						case val := <-watchclient.Watch(domainConfigKey, &meta.DomainConfig{}):
 							domainCfg.Store(domain, val)
 						case <-ch:
-							fmt.Println("close ch")
+							fmt.Println("close ch for ", domain)
 							return
 						}
 					}
