@@ -8,7 +8,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-const AsyncRequestHeader = "X-Async-Request"
+const enqueueRequestHeader = "X-Enqueue-Request"
 
 var proxyConfig *serveConfig
 var wrapper *hostWrapper
@@ -39,6 +39,7 @@ func Serve() (err error) {
 	if err != nil {
 		return err
 	}
+	go wrapper.consume()
 	log.Println("serving ingress", proxyConfig.Addr)
 	if err := fasthttp.ListenAndServe(proxyConfig.Addr, handleIngress); err != nil {
 		return err
@@ -48,21 +49,12 @@ func Serve() (err error) {
 
 // handleIngress forword request to local service or send to queue (then wait for callback)
 func handleIngress(ctx *fasthttp.RequestCtx) {
-	isAsyncRequest := string(ctx.Request.Header.Peek(AsyncRequestHeader)) == "1"
-	if !wrapper.checkLimit() {
-		wrapper.queueRequest(ctx, isAsyncRequest)
+	forceEnqueue := string(ctx.Request.Header.Peek(enqueueRequestHeader)) == "1"
+	if forceEnqueue || !wrapper.checkLimit() {
+		wrapper.queueRequest(ctx, forceEnqueue)
 		return
 	}
 	defer wrapper.releaseLimit()
-	if isAsyncRequest {
-		writeIngressResponse(ctx, 200, 0, "Received async request")
-		go func() {
-			if err := wrapper.forward(ctx); err != nil {
-				log.Println("request async request error", err)
-			}
-		}()
-		return
-	}
 	if err := wrapper.forward(ctx); err != nil {
 		writeIngressResponse(ctx, 500, 502, fmt.Sprintf("Forward request to %s failed: %v", proxyConfig.Target, err))
 	}

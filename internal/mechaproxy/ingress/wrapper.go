@@ -45,12 +45,12 @@ func (w *hostWrapper) forward(ctx *fasthttp.RequestCtx) error {
 	return w.client.Do(&ctx.Request, &ctx.Response)
 }
 
-func (w *hostWrapper) queueRequest(ctx *fasthttp.RequestCtx, isAsync bool) {
+func (w *hostWrapper) queueRequest(ctx *fasthttp.RequestCtx, forceEnqueue bool) {
 	var msgID uint64 = atomic.AddUint64(&messageID, 1)
 	// create channel before enqueue
 	var waitChan *callback.WaitChan
 	var callbackAddr string
-	if !isAsync {
+	if !forceEnqueue {
 		ipPort := callback.GetAddress()
 		callbackAddr = fmt.Sprintf("http://%s/%d", ipPort, msgID)
 		waitChan = callback.NewCallbackChan(time.Minute, msgID, &ctx.Response)
@@ -66,7 +66,7 @@ func (w *hostWrapper) queueRequest(ctx *fasthttp.RequestCtx, isAsync bool) {
 
 	w.queue.Push(msg)
 
-	if isAsync {
+	if forceEnqueue {
 		writeIngressResponse(ctx, 200, 0, "received")
 		return
 	} else {
